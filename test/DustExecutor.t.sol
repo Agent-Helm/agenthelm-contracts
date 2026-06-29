@@ -12,6 +12,7 @@ contract DustExecutorTest is Test {
     address internal permit2 = makeAddr("permit2");
     address internal user = makeAddr("user");
     address internal router = makeAddr("router");
+    address internal helm = makeAddr("helm");
 
     function setUp() public {
         executor = new DustExecutor(weth, permit2);
@@ -21,9 +22,11 @@ contract DustExecutorTest is Test {
         assertEq(executor.owner(), owner);
         assertEq(executor.WETH(), weth);
         assertEq(address(executor.PERMIT2()), permit2);
-        assertEq(executor.feeCollector(), owner);
-        assertEq(executor.feeBps(), 100);
-        assertEq(executor.MAX_FEE_BPS(), 300);
+        assertEq(executor.ownerWallet(), owner);
+        assertEq(executor.MAX_FEE_BPS(), 1000);
+        assertEq(executor.ethFeeBps(), 1000);
+        assertEq(executor.ethBurnBps(), 300);
+        assertEq(executor.helmFeeBps(), 500);
     }
 
     function test_Constructor_RevertOnZeroWeth() public {
@@ -49,24 +52,56 @@ contract DustExecutorTest is Test {
         executor.setRouter(router, true);
     }
 
-    function test_SetFeeBps() public {
-        executor.setFeeBps(250);
-        assertEq(executor.feeBps(), 250);
+    function test_SetOwnerWallet() public {
+        executor.setOwnerWallet(user);
+        assertEq(executor.ownerWallet(), user);
     }
 
-    function test_SetFeeBps_RevertAboveMax() public {
+    function test_SetOwnerWallet_RevertZero() public {
+        vm.expectRevert("wallet zero");
+        executor.setOwnerWallet(address(0));
+    }
+
+    function test_SetOwnerWallet_OnlyOwner() public {
+        vm.prank(user);
+        vm.expectRevert("Ownable: caller is not owner");
+        executor.setOwnerWallet(user);
+    }
+
+    function test_SetFees() public {
+        executor.setFees(800, 200, 400);
+        assertEq(executor.ethFeeBps(), 800);
+        assertEq(executor.ethBurnBps(), 200);
+        assertEq(executor.helmFeeBps(), 400);
+    }
+
+    function test_SetFees_RevertAboveMax() public {
         vm.expectRevert("fee too high");
-        executor.setFeeBps(301);
+        executor.setFees(1001, 0, 500);
     }
 
-    function test_SetFeeCollector() public {
-        executor.setFeeCollector(user);
-        assertEq(executor.feeCollector(), user);
+    function test_SetFees_RevertBurnExceedsFee() public {
+        vm.expectRevert("burn exceeds fee");
+        executor.setFees(500, 600, 500);
     }
 
-    function test_SetFeeCollector_RevertZero() public {
-        vm.expectRevert("collector zero");
-        executor.setFeeCollector(address(0));
+    function test_SetFees_OnlyOwner() public {
+        vm.prank(user);
+        vm.expectRevert("Ownable: caller is not owner");
+        executor.setFees(800, 200, 400);
+    }
+
+    function test_SetHelmConfig() public {
+        executor.setHelmConfig(helm, router, 0x800000, 200, address(0));
+        assertEq(executor.helmToken(), helm);
+        assertEq(executor.helmRouter(), router);
+        assertEq(executor.helmPoolFee(), 0x800000);
+        assertEq(executor.helmTickSpacing(), int24(200));
+    }
+
+    function test_SetHelmConfig_RevertZero() public {
+        vm.expectRevert("zero addr");
+        executor.setHelmConfig(address(0), router, 0x800000, 200, address(0));
     }
 
     function test_TransferOwnership() public {
@@ -84,13 +119,13 @@ contract DustExecutorTest is Test {
         DustExecutor.Swap[] memory swaps = new DustExecutor.Swap[](1);
         vm.warp(1_000);
         vm.expectRevert("Deadline expired");
-        executor.convertDust(swaps, 999);
+        executor.convertDust(swaps, 999, DustExecutor.OutputMode.ETH, 0);
     }
 
     function test_ConvertDust_RevertNoSwaps() public {
         DustExecutor.Swap[] memory swaps = new DustExecutor.Swap[](0);
         vm.expectRevert("No swaps");
-        executor.convertDust(swaps, block.timestamp + 1);
+        executor.convertDust(swaps, block.timestamp + 1, DustExecutor.OutputMode.ETH, 0);
     }
 
     function test_RescueETH_OnlyOwner() public {
