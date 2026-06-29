@@ -36,7 +36,8 @@ contract DeployDustExecutor is Script {
 
         console2.log("DustExecutor:", address(dustExecutor));
         console2.log("owner:       ", dustExecutor.owner());
-        console2.log("feeCollector:", dustExecutor.feeCollector());
-        console2.log("feeBps:      ", dustExecutor.feeBps());
+        console2.log("ownerWallet: ", dustExecutor.ownerWallet());
+        console2.log("ethFeeBps:   ", dustExecutor.ethFeeBps());
+        console2.log("helmFeeBps:  ", dustExecutor.helmFeeBps());
     }
 }
